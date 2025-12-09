@@ -5,7 +5,7 @@
 This guide details the complete process for setting up a modern, real-time web dashboard to monitor your Microsoft Deployment Toolkit (MDT) deployments. The dashboard connects directly to the MDT monitoring web service via an IIS reverse proxy, providing a live look at deployments in progress from a standard web port.
 
 ### Final Result Overview
-![Dashboard Screenshot](<"https://github.com/user-attachments/assets/e336794e-318d-45de-b1a1-d02c2af13ba0" />)
+![Dashboard Screenshot](https://github.com/user-attachments/assets/e336794e-318d-45de-b1a1-d02c2af13ba0)
 
 ---
 
