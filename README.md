@@ -1,87 +1,65 @@
-Creating a Live MDT Monitoring Web Dashboard
-This guide details the complete process for setting up a modern, real-time web dashboard to monitor your Microsoft Deployment Toolkit (MDT) deployments. The dashboard connects directly to the MDT monitoring web service, providing a live look at deployments in progress from a simple web page.
+# Live MDT Monitoring Web Dashboard
 
-This is the final result:
+![MDT](https://img.shields.io/badge/MDT-Microsoft%20Deployment%20Toolkit-blue.svg) ![IIS](https://img.shields.io/badge/Server-IIS-orange.svg)
 
-Prerequisites
-Before you begin, ensure you have the following:
+This guide details the complete process for setting up a modern, real-time web dashboard to monitor your Microsoft Deployment Toolkit (MDT) deployments. The dashboard connects directly to the MDT monitoring web service via an IIS reverse proxy, providing a live look at deployments in progress from a standard web port.
 
-A server running MDT (e.g., MB03).
+### Final Result Overview
+*(Replace this image placeholder with a screenshot of your finished dashboard)*
+![Dashboard Screenshot](https://via.placeholder.com/800x450.png?text=Insert+Your+Dashboard+Screenshot+Here)
 
-The MDT Monitoring Service enabled and running (this is a feature of MDT, typically on port 9801).
+---
 
-The Internet Information Services (IIS) role installed on the same server.
+## Prerequisites
 
-Administrator access to the server.
+Before you begin, ensure your environment meets these requirements:
 
-Part 1: Install IIS Add-ons
-To get data from the MDT service (on port 9801) to our website (on port 80), we must install two add-ons for IIS that allow it to act as a reverse proxy.
+* ✅ A server running MDT (e.g., `Server1`).
+* ✅ The **MDT Monitoring Service** feature enabled in MDT (typically running on port `9801`).
+* ✅ The **Internet Information Services (IIS)** role installed on the same server.
+* ✅ **Administrator access** to the server.
 
-Install Application Request Routing (ARR):
+---
 
-This module allows IIS to forward requests.
+## Part 1: Install IIS Add-ons
 
-Download Link: Application Request Routing (ARR) 3.0
+To bridge data from the MDT service (port `9801`) to standard web traffic (port `80`), we must configure IIS to act as a reverse proxy. This requires two specific Microsoft add-ons.
 
-Install URL Rewrite:
+### 1. Application Request Routing (ARR) 3.0
+This module enables IIS to handle request forwarding and proxying.
+> [Download ARR 3.0](https://www.iis.net/downloads/microsoft/application-request-routing)
 
-This module reads our rules to know which requests to forward.
+### 2. URL Rewrite
+This module allows us to define rules that intercept incoming traffic and redirect it to the MDT port.
+> [Download URL Rewrite](https://www.iis.net/downloads/microsoft/url-rewrite)
 
-Download Link: URL Rewrite
+> **⚠️ Important:** After installing both modules, you must close and reopen the **IIS Manager** console for the new features to appear in the UI.
 
-After installing both, you must close and re-open IIS Manager for the new icons to appear.
+---
 
-Part 2: Configure IIS
-Step 2.1: Create the Website
-On your server, create a new folder for the website files (e.g., C:\inetpub\wwwroot\MDTMonitoringDashboard).
+## Part 2: Configure IIS
 
-Open IIS Manager.
+### Step 2.1: Create the Website Folder and Site
+1.  On your MDT server, create a physical folder to host the dashboard files:
+    `C:\inetpub\wwwroot\MDTMonitoringDashboard`
+2.  Open **IIS Manager**.
+3.  In the **Connections** pane (left side), right-click **Sites** and select **Add Website...**.
+4.  Configure the site details:
+    * **Site name:** `MDT Monitoring Dashboard`
+    * **Physical path:** Browse to the folder created above.
+    * **Port:** `80` (use `8080` if 80 is already occupied).
+    * **IP address:** Select your server's specific IP (e.g., `192.168.1.3`).
+5.  Click **OK**.
 
-In the "Connections" pane, right-click Sites and select "Add Website...".
+### Step 2.2: Enable Server-Level Proxying
+1.  In IIS Manager, click the root server node in the **Connections** pane (e.g., `Server1`).
+2.  In the center feature view, locate and double-click **Application Request Routing Cache**.
+3.  In the **Actions** pane (far right), click **Server Proxy Settings...**.
+4.  Check the top box labeled **Enable proxy**.
+5.  Leave default settings below and click **Apply**.
 
-Fill out the details:
+---
 
-Site name: MDT Monitoring Dashboard
+## Part 3: Add Dashboard Files
 
-Physical path: C:\inetpub\wwwroot\MDTMonitoringDashboard (or the folder you just created).
-
-Binding > Port: 80 (or another port like 8080 if 80 is in use).
-
-Binding > IP address: Select your server's IP (e.g., 192.168.1.3).
-
-Click OK.
-
-Step 2.2: Enable the IIS Proxy (Server Level)
-In IIS Manager, click your server's name in the "Connections" pane (e.g., MB03).
-
-In the center "Home" pane, find and double-click the "Application Request Routing Cache" icon.
-
-In the "Actions" pane (far right), click "Server Proxy Settings...".
-
-Check the box for "Enable proxy".
-
-Click "Apply".
-
-Part 3: Add the Dashboard Files
-Navigate to the physical path you created (C:\inetpub\wwwroot\MDTMonitoringDashboard) and create the following two files.
-
- 
-Open the Deployment Workbench on your MDT server.
-
-Right-click your Deployment Share and select "Properties".
-
-Go to the "Rules" tab.
-
-Add the following line to your [Settings] or [Default] section:
-
-1
-EventService=http://mb03:9801
-Click OK or Apply.
-
-CRITICAL STEP: You must now Update your Deployment Share.
-
-Right-click your Deployment Share and select "Update Deployment Share".
-
-Choose the option to completely regenerate your boot images.
-
-Once complete, copy your new boot images (in the \Boot folder of your share) over to your WDS server to replace the old ones.
+Navigate to your website folder (`C:\inetpub\wwwroot\MDTMonitoringDashboard`) and create the following two necessary files. Or clone the git reprositry
