@@ -1,0 +1,824 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-gray-900">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MDT Monitoring Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+    <style>
+        /* Custom scrollbar for webkit browsers */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #1a202c; }
+        ::-webkit-scrollbar-thumb { background: #4a5568; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #718096; }
+        body { font-family: 'Inter', sans-serif; }
+        @import url('https://rsms.me/inter/inter.css');
+        html { font-family: 'Inter', sans-serif; }
+
+        /* Custom progress bar color */
+        .progress-bar-blue::-webkit-progress-bar { background-color: #2d3748; }
+        .progress-bar-blue::-webkit-progress-value { background-color: #3b82f6; border-radius: 0.25rem; transition: width 0.5s ease-in-out; }
+        .progress-bar-blue::-moz-progress-bar { background-color: #3b82f6; border-radius: 0.25rem; }
+
+        /* Mobile sidebar styles */
+        @media (max-width: 768px) {
+            #sidebar {
+                transform: translateX(-100%);
+                transition: transform 0.3s ease-in-out;
+            }
+            #sidebar.open {
+                transform: translateX(0);
+            }
+            #sidebar-overlay {
+                display: none;
+            }
+            #sidebar.open ~ #sidebar-overlay {
+                display: block;
+            }
+        }
+        
+        /* Active nav link style */
+        .nav-link.active {
+            background-color: #1f2937; /* gray-800 */
+            color: #60a5fa; /* blue-400 */
+            border-left: 4px solid #60a5fa; /* blue-400 */
+        }
+        .nav-link {
+            border-left: 4px solid transparent;
+        }
+
+        /* Modal styles */
+        .modal {
+            transition: opacity 0.25s ease;
+        }
+        .modal-content {
+            transition: transform 0.25s ease;
+        }
+    </style>
+</head>
+<body class="h-full flex text-gray-200 overflow-hidden">
+
+    <!-- Sidebar Navigation -->
+    <nav id="sidebar" class="w-64 bg-gray-900 border-r border-gray-700/50 flex flex-col flex-shrink-0 absolute md:relative z-20 h-full">
+        <div class="h-16 flex items-center justify-between px-6 border-b border-gray-700/50 flex-shrink-0">
+            <div class="flex items-center">
+                <i class="fas fa-server text-blue-400 mr-3 text-lg"></i>
+                <span class="font-semibold text-lg text-white">MDT/WDS Manager</span>
+            </div>
+            <!-- Mobile close button -->
+            <button id="sidebar-close-btn" class="md:hidden text-gray-400 hover:text-white">
+                <i class="fas fa-times text-xl"></i>
+            </button>
+        </div>
+        <div class="flex-grow flex flex-col justify-between overflow-y-auto">
+            <div class="py-6">
+                <span class="text-xs font-semibold text-gray-500 uppercase px-6">Navigation</span>
+                <ul id="navigation-links" class="mt-4 space-y-2">
+                    <li>
+                        <a href="#" class="nav-link flex items-center px-6 py-3 text-gray-300 hover:bg-gray-800" data-page="dashboard">
+                            <i class="fas fa-tachometer-alt w-6 text-center"></i>
+                            <span class="ml-4 font-medium">Dashboard</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="#" class="nav-link flex items-center px-6 py-3 text-gray-300 hover:bg-gray-800" data-page="archived">
+                            <i class="fas fa-archive w-6 text-center"></i>
+                            <span class="ml-4 font-medium">Archived Devices</span>
+                        </a>
+                    </li>
+                </ul>
+                <span class="text-xs font-semibold text-gray-500 uppercase px-6 mt-8 block">System Status</span>
+                <ul class="mt-4 space-y-3 px-6">
+                    <li id="mdt-status-item" class="flex items-center justify-between">
+                        <span class="flex items-center">
+                            <span id="mdt-status-light" class="h-2 w-2 bg-yellow-500 rounded-full mr-3 animate-pulse"></span>
+                            <span class="text-sm font-medium text-gray-400">MDT Service</span>
+                        </span>
+                        <span id="mdt-status-text" class="text-sm text-yellow-500 font-medium">Checking...</span>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Sidebar overlay for mobile -->
+    <div id="sidebar-overlay" class="fixed inset-0 bg-black/50 z-10 md:hidden" onclick="toggleSidebar()"></div>
+
+    <!-- Main Content -->
+    <main class="flex-1 flex flex-col bg-gray-800/50 overflow-auto">
+        <!-- Header -->
+        <header class="h-16 bg-gray-900 border-b border-gray-700/50 flex items-center justify-between px-4 md:px-8 flex-shrink-0 z-10">
+            <!-- Mobile open button -->
+            <button id="sidebar-open-btn" class="md:hidden text-gray-400 hover:text-white mr-3">
+                <i class="fas fa-bars text-xl"></i>
+            </button>
+            <div class="flex-1 min-w-0">
+                <h1 id="page-title" class="text-xl font-semibold text-white truncate">Device Deployment Dashboard</h1>
+                <span id="page-subtitle" class="text-sm text-gray-400 hidden md:block">Monitor and manage MDT/WDS deployments in real-time</span>
+            </div>
+        </header>
+
+        <!-- Page Content -->
+        <div class="flex-1 p-4 md:p-8 overflow-y-auto">
+
+            <!-- Summary Cards (Dashboard only) -->
+            <div id="summary-cards" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <!-- Total Devices -->
+                <div class="bg-gray-900 rounded-xl p-6 flex items-center justify-between shadow-lg">
+                    <div>
+                        <span class="text-sm font-medium text-gray-400">Total Devices</span>
+                        <span id="total-devices" class="text-4xl font-bold text-white block mt-1">0</span>
+                    </div>
+                    <div class="w-12 h-12 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center text-xl flex-shrink-0">
+                        <i class="fas fa-desktop"></i>
+                    </div>
+                </div>
+                <!-- In Progress -->
+                <div class="bg-gray-900 rounded-xl p-6 flex items-center justify-between shadow-lg">
+                    <div>
+                        <span class="text-sm font-medium text-gray-400">In Progress</span>
+                        <span id="in-progress" class="text-4xl font-bold text-white block mt-1">0</span>
+                    </div>
+                    <div class="w-12 h-12 rounded-full bg-yellow-500/20 text-yellow-400 flex items-center justify-center text-xl flex-shrink-0">
+                        <i class="fas fa-sync-alt fa-spin"></i>
+                    </div>
+                </div>
+                <!-- Completed -->
+                <div class="bg-gray-900 rounded-xl p-6 flex items-center justify-between shadow-lg">
+                    <div>
+                        <span class="text-sm font-medium text-gray-400">Completed (New)</span>
+                        <span id="completed" class="text-4xl font-bold text-white block mt-1">0</span>
+                    </div>
+                    <div class="w-12 h-12 rounded-full bg-green-500/20 text-green-400 flex items-center justify-center text-xl flex-shrink-0">
+                        <i class="fas fa-check-circle"></i>
+                    </div>
+                </div>
+                <!-- Failed -->
+                <div class="bg-gray-900 rounded-xl p-6 flex items-center justify-between shadow-lg">
+                    <div>
+                        <span class="text-sm font-medium text-gray-400">Failed (New)</span>
+                        <span id="failed" class="text-4xl font-bold text-white block mt-1">0</span>
+                    </div>
+                    <div class="w-12 h-12 rounded-full bg-red-500/20 text-red-400 flex items-center justify-center text-xl flex-shrink-0">
+                        <i class="fas fa-times-circle"></i>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Filter Bar -->
+            <div class="bg-gray-900 rounded-xl p-4 mt-8 flex flex-col md:flex-row items-center gap-4 shadow-lg">
+                <div class="relative flex-grow w-full md:w-auto">
+                    <input type="text" id="search-box" placeholder="Search by hostname or IP..." class="w-full bg-gray-800 rounded-lg border border-gray-700 text-white px-4 py-2 pl-10 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-500"></i>
+                </div>
+                <select id="filter-status" class="w-full md:w-auto bg-gray-800 rounded-lg border border-gray-700 text-white px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="all">All Status</option>
+                    <option value="In Progress">In Progress</option>
+                    <option value="Pending">Pending</option>
+                    <option value="Completed">Completed</option>
+                    <option value="Failed">Failed</option>
+                </select>
+            </div>
+
+            <!-- Device Grid -->
+            <div id="device-grid" class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6 mt-8">
+                <!-- Device cards will be injected here by JavaScript -->
+            </div>
+
+            <!-- Error/Loading Message -->
+            <div id="message-box" class="hidden text-center text-gray-400 p-8">
+                <i class="fas fa-sync-alt fa-spin text-4xl mb-4"></i>
+                <p class="text-lg">Loading live data...</p>
+            </div>
+
+        </div>
+    </main>
+    
+    <!-- Device Details Modal -->
+    <div id="device-modal" class="modal fixed inset-0 bg-black/70 z-30 flex items-center justify-center p-4 hidden opacity-0" onclick="closeDeviceModal()">
+        <div class="modal-content bg-gray-900 w-full max-w-2xl max-h-[90vh] rounded-xl shadow-lg border border-gray-700/50 flex flex-col opacity-0 -translate-y-4" onclick="event.stopPropagation()">
+            <!-- Modal Header -->
+            <div class="flex items-center justify-between p-5 border-b border-gray-700/50 flex-shrink-0">
+                <div class="flex items-center">
+                    <i class="fas fa-desktop text-blue-400 mr-3 text-lg"></i>
+                    <h3 id="modal-hostname" class="text-xl font-semibold text-white">Device Details</h3>
+                </div>
+                <button class="text-gray-500 hover:text-white transition-colors" onclick="closeDeviceModal()">
+                    <i class="fas fa-times text-2xl"></i>
+                </button>
+            </div>
+            <!-- Modal Body -->
+            <div id="modal-body" class="p-6 overflow-y-auto text-sm">
+                <!-- Content will be injected by JS -->
+            </div>
+            <!-- Modal Footer -->
+            <div class="p-4 bg-gray-900/50 border-t border-gray-700/50 flex justify-end flex-shrink-0">
+                <button class="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors" onclick="closeDeviceModal()">
+                    Close
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // --- DOM Elements ---
+        const deviceGrid = document.getElementById('device-grid');
+        const totalDevicesEl = document.getElementById('total-devices');
+        const inProgressEl = document.getElementById('in-progress');
+        const completedEl = document.getElementById('completed');
+        const failedEl = document.getElementById('failed');
+        const searchBox = document.getElementById('search-box');
+        const filterStatus = document.getElementById('filter-status');
+        const messageBox = document.getElementById('message-box');
+        const mdtStatusLight = document.getElementById('mdt-status-light');
+        const mdtStatusText = document.getElementById('mdt-status-text');
+        const sidebar = document.getElementById('sidebar');
+        const sidebarOpenBtn = document.getElementById('sidebar-open-btn');
+        const sidebarCloseBtn = document.getElementById('sidebar-close-btn');
+        const pageTitle = document.getElementById('page-title');
+        const pageSubtitle = document.getElementById('page-subtitle');
+        const summaryCards = document.getElementById('summary-cards');
+        const navLinks = document.querySelectorAll('.nav-link');
+        const deviceModal = document.getElementById('device-modal');
+        const modalHostname = document.getElementById('modal-hostname');
+        const modalBody = document.getElementById('modal-body');
+
+        // --- State ---
+        let allDevices = [];
+        let archivedDevices = new Set(JSON.parse(localStorage.getItem('archivedMDTDevices') || '[]'));
+        let currentPage = 'dashboard';
+        const DATA_URL = '/api/mdtdata'; // Proxy rule 1
+        const STATUS_URL = '/api/mdtstatus'; // Proxy rule 2
+        const REFRESH_INTERVAL = 5000; // 5 seconds
+        const OFFLINE_TIMEOUT = 120000; // 2 minutes
+        let serviceStatus = 'checking'; // checking, online, offline
+        let lastSuccessfulCheck = Date.now();
+        let offlineTimer = null;
+        let elapsedTimerInterval = null;
+
+        // --- Status Styling Helper ---
+        function getStatusInfo(status) {
+            switch (status) {
+                case "In Progress":
+                    return { icon: "fas fa-sync-alt", color: "yellow-400", bg: "yellow-500/20" };
+                case "Completed":
+                    return { icon: "fas fa-check-circle", color: "green-400", bg: "green-500/20" };
+                case "Failed":
+                    return { icon: "fas fa-times-circle", color: "red-400", bg: "red-500/20" };
+                case "Pending":
+                default:
+                    return { icon: "fas fa-clock", color: "blue-400", bg: "blue-500/20" };
+            }
+        }
+        
+        // --- Formatting Helper ---
+        function formatDateTime(isoString) {
+            if (!isoString || isoString.startsWith('0001-')) {
+                return 'N/A';
+            }
+            try {
+                const date = new Date(isoString);
+                // Check for invalid date (common with MDT's null dates)
+                if (isNaN(date.getTime())) return 'N/A';
+                return date.toLocaleString();
+            } catch (e) {
+                return isoString;
+            }
+        }
+        
+        function formatValue(value) {
+            if (value === null || value === undefined || value === '') {
+                return 'N/A';
+            }
+            return value;
+        }
+
+        // --- Time Elapsed Function ---
+        function formatDuration(start, end) {
+            let milliseconds;
+            if (end) {
+                milliseconds = new Date(end) - new Date(start);
+            } else {
+                milliseconds = Date.now() - new Date(start);
+            }
+
+            if (isNaN(milliseconds) || milliseconds < 0) return '00:00:00';
+
+            let seconds = Math.floor(milliseconds / 1000);
+            let minutes = Math.floor(seconds / 60);
+            let hours = Math.floor(minutes / 60);
+
+            seconds = seconds % 60;
+            minutes = minutes % 60;
+
+            const pad = (num) => num.toString().padStart(2, '0');
+            return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+        }
+
+        // --- Render Functions ---
+        function renderDeviceCard(device) {
+            const status = getStatusInfo(device.status);
+            
+            // --- Card Buttons Logic ---
+            let cardButtons = '';
+            const isArchived = archivedDevices.has(device.id);
+
+            if (status.icon === 'fas fa-check-circle' || status.icon === 'fas fa-times-circle') {
+                if (isArchived) {
+                    cardButtons += `<button onclick="unarchiveDevice(event, '${device.id}')" class="text-xs bg-gray-600/80 hover:bg-gray-600 text-white font-semibold py-1 px-3 rounded-md transition-all duration-200 ml-2"><i class="fas fa-undo mr-1.5"></i>Unarchive</button>`;
+                } else {
+                    cardButtons += `<button onclick="archiveDevice(event, '${device.id}')" class="text-xs bg-gray-600/80 hover:bg-gray-600 text-white font-semibold py-1 px-3 rounded-md transition-all duration-200 ml-2"><i class="fas fa-archive mr-1.5"></i>Archive</button>`;
+                }
+            }
+            
+            // --- Progress Bar Logic ---
+            const progressBar = device.status === "In Progress" ? `
+                <div class="mt-4">
+                    <div class="flex justify-between text-xs text-gray-400 mb-1">
+                        <span class="truncate pr-2" title="${device.currentTask}">${device.currentTask}</span>
+                        <span>${device.progress}%</span>
+                    </div>
+                    <progress class="w-full h-2 rounded-sm progress-bar-blue" value="${device.progress}" max="100"></progress>
+                </div>
+            ` : `
+                <div class="mt-4">
+                    <p class="text-xs text-gray-400 truncate" title="${device.currentTask || ''}">${device.currentTask || 'No task information.'}</p>
+                </div>
+            `;
+            
+            // --- Elapsed Time ---
+            let elapsedTime = 'N/A';
+            if (device.startTimeRaw) { // Check if we have a valid start date
+                elapsedTime = formatDuration(device.startTimeRaw, device.status === 'In Progress' ? null : device.endTimeRaw);
+            }
+            
+            return `
+                <div class="bg-gray-900 rounded-xl shadow-lg border border-gray-700/50 device-card transition-all duration-200 cursor-pointer hover:border-blue-500/50"
+                     data-hostname="${device.hostname.toLowerCase()}"
+                     data-status="${device.status}"
+                     data-ip="${device.ipAddress || ''}"
+                     data-start-time="${device.startTimeRaw || ''}"
+                     data-end-time="${device.endTimeRaw || ''}"
+                     data-status-val="${device.status}"
+                     data-id="${device.id}"
+                     onclick="openDeviceModal('${device.id}')">
+                    
+                    <div class="p-6">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center min-w-0">
+                                <i class="fas fa-desktop text-gray-500 mr-3"></i>
+                                <div class="min-w-0">
+                                    <h3 class="font-bold text-lg text-white truncate" title="${device.hostname}">${device.hostname}</h3>
+                                    <!-- Department/Resource field removed -->
+                                </div>
+                            </div>
+                            <span class="text-xs font-semibold px-3 py-1 rounded-full ${status.bg} text-${status.color} flex-shrink-0 ml-2">
+                                <i class="${status.icon} ${device.status === 'In Progress' ? 'fa-spin' : ''} mr-1.5"></i>
+                                ${device.status}
+                            </span>
+                        </div>
+
+                        ${progressBar}
+
+                        <div class="border-t border-gray-700/50 mt-6 pt-4 text-sm text-gray-400 space-y-2">
+                            <div class="flex justify-between">
+                                <span>IP Address:</span>
+                                <span class="font-mono text-gray-300">${device.ipAddress || 'N/A'}</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span>MAC Address:</span>
+                                <span class="font-mono text-gray-300">${device.macAddress || 'N/A'}</span>
+                            </div>
+                            <div class="flex justify-between mt-1 pt-1">
+                                <span class="text-xs">${device.startTime}</span>
+                                <span class="text-sm font-medium text-gray-300 elapsed-time" data-id="${device.id}">${elapsedTime}</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Buttons -->
+                    <div class="border-t border-gray-700/50 pt-4 pb-4 px-6 text-right bg-gray-900/30 rounded-b-xl">
+                        ${cardButtons}
+                    </div>
+                </div>
+            `;
+        }
+        
+        // --- Update Elapsed Time on visible cards ---
+        function updateElapsedTimes() {
+            const cards = deviceGrid.querySelectorAll('.device-card[data-status-val="In Progress"]');
+            cards.forEach(card => {
+                const startTime = card.dataset.startTime;
+                if (startTime) {
+                    const elapsedTimeEl = card.querySelector('.elapsed-time');
+                    if (elapsedTimeEl) {
+                        elapsedTimeEl.textContent = formatDuration(new Date(startTime), null);
+                    }
+                }
+            });
+        }
+
+
+        function renderDashboard() {
+            // --- Page View Logic ---
+            let devicesToDisplay = [];
+            if (currentPage === 'dashboard') {
+                // Dashboard shows In Progress, Pending, AND any un-archived Completed/Failed
+                devicesToDisplay = allDevices.filter(d => {
+                    const isArchived = archivedDevices.has(d.id);
+                    if (d.status === 'In Progress' || d.status === 'Pending') {
+                        return true;
+                    }
+                    if ((d.status === 'Completed' || d.status === 'Failed') && !isArchived) {
+                        return true;
+                    }
+                    return false;
+                });
+                summaryCards.style.display = 'grid';
+            } else if (currentPage === 'archived') {
+                // Archived page shows ONLY archived devices
+                devicesToDisplay = allDevices.filter(d => archivedDevices.has(d.id));
+                summaryCards.style.display = 'none';
+            }
+
+            // --- Summary Card Updates ---
+            totalDevicesEl.textContent = allDevices.length;
+            inProgressEl.textContent = allDevices.filter(d => d.status === 'In Progress').length;
+            // "New" = Completed but not archived
+            completedEl.textContent = allDevices.filter(d => d.status === 'Completed' && !archivedDevices.has(d.id)).length;
+            failedEl.textContent = allDevices.filter(d => d.status === 'Failed' && !archivedDevices.has(d.id)).length;
+            
+            // --- Apply Filters ---
+            const searchTerm = searchBox.value.toLowerCase();
+            const statusFilter = filterStatus.value;
+
+            const filteredDevices = devicesToDisplay.filter(device => {
+                const matchesSearch = searchTerm === '' ||
+                    device.hostname.toLowerCase().includes(searchTerm) ||
+                    (device.ipAddress && device.ipAddress.toLowerCase().includes(searchTerm));
+                
+                const matchesStatus = statusFilter === 'all' || device.status === statusFilter;
+
+                return matchesSearch && matchesStatus;
+            });
+
+            // --- Render Cards ---
+            if (filteredDevices.length > 0) {
+                deviceGrid.innerHTML = filteredDevices.map(renderDeviceCard).join('');
+                messageBox.classList.add('hidden');
+            } else {
+                deviceGrid.innerHTML = ''; // Clear the grid
+                let msg = '';
+                if (devicesToDisplay.length > 0) {
+                    msg = 'No devices match the current filters.';
+                } else if (currentPage === 'dashboard') {
+                    msg = 'No active deployments found.';
+                } else if (currentPage === 'archived') {
+                    msg = 'No devices have been archived.';
+                }
+                messageBox.innerHTML = `<i class="fas fa-info-circle text-blue-400 text-4xl mb-4"></i><p class="text-lg">${msg}</p>`;
+                messageBox.classList.remove('hidden');
+            }
+            
+            // After rendering, do an initial update of elapsed times
+            updateElapsedTimes();
+        }
+        
+        // --- Data Parsing ---
+        function parseMdtXml(xmlText) {
+            const parser = new DOMParser();
+            const xmlDoc = parser.parseFromString(xmlText, "text/xml");
+            const entries = xmlDoc.getElementsByTagName("entry");
+            const devices = [];
+            const ns = {
+                'd': 'http://schemas.microsoft.com/ado/2007/08/dataservices',
+                'm': 'http://schemas.microsoft.com/ado/2007/08/dataservices/metadata'
+            };
+
+            function getProp(entry, name) {
+                const el = entry.getElementsByTagNameNS(ns.d, name)[0];
+                return el ? el.textContent : '';
+            }
+            
+            function getPropIsNull(entry, name) {
+                const el = entry.getElementsByTagNameNS(ns.d, name)[0];
+                return el ? el.getAttributeNS(ns.m, 'null') === 'true' : false;
+            }
+
+            for (let entry of entries) {
+                const progress = getProp(entry, "PercentComplete");
+                const step = getProp(entry, "CurrentStep");
+                const totalSteps = getProp(entry, "TotalSteps");
+                const startTimeStr = getProp(entry, "StartTime");
+                let endTimeStr = getProp(entry, "EndTime");
+                const lastTimeStr = getProp(entry, "LastTime");
+                const uniqueID = getProp(entry, "UniqueID");
+                
+                let status = "In Progress";
+                // Use getPropIsNull to check for null EndTime
+                if (progress === "100" || !getPropIsNull(entry, "EndTime")) {
+                    status = "Completed";
+                }
+                if (getProp(entry, "Errors") > 0) {
+                    status = "Failed";
+                }
+                if (progress === "0" && step === "0" && getPropIsNull(entry, "EndTime")) {
+                    status = "Pending";
+                }
+                
+                // --- FIX for Elapsed Time ---
+                // If the task is done (Completed/Failed) but the EndTime is null,
+                // use the LastTime (last check-in) as the end time to "freeze" the timer.
+                if ((status === "Completed" || status === "Failed") && getPropIsNull(entry, "EndTime")) {
+                    if (lastTimeStr) {
+                        endTimeStr = lastTimeStr;
+                    }
+                }
+                
+                let currentTask = "Processing...";
+                if (status === "In Progress") {
+                    currentTask = `Step ${step} of ${totalSteps}: ${getProp(entry, "StepName")}`;
+                } else if (status === "Completed") {
+                    currentTask = "Deployment finished successfully.";
+                } else if (status === "Failed") {
+                    currentTask = `Failed at step ${step}: ${getProp(entry, "StepName")}. Error code: ${getProp(entry, "ErrorCode")}`;
+                } else if (status === "Pending") {
+                    currentTask = "Waiting to start deployment...";
+                }
+                
+                // Store raw start/end times for calculations
+                const startTimeRaw = (!startTimeStr || startTimeStr.startsWith('0001-') || isNaN(new Date(startTimeStr).getTime())) ? null : new Date(startTimeStr).toISOString();
+                // Use the potentially-corrected endTimeStr
+                const endTimeRaw = (!endTimeStr || endTimeStr.startsWith('0001-') || (getPropIsNull(entry, "EndTime") && !lastTimeStr) || isNaN(new Date(endTimeStr).getTime())) ? null : new Date(endTimeStr).toISOString();
+
+
+                devices.push({
+                    // Base Card Info
+                    id: uniqueID, // Use UniqueID as the reliable ID
+                    hostname: getProp(entry, "Name"),
+                    department: '', // Field removed
+                    ipAddress: getProp(entry, "IPAddress"),
+                    macAddress: getProp(entry, "MacAddress"),
+                    status: status,
+                    progress: parseInt(progress, 10) || 0,
+                    currentTask: currentTask,
+                    startTime: formatDateTime(startTimeRaw),
+                    startTimeRaw: startTimeRaw,
+                    endTimeRaw: endTimeRaw,
+                    
+                    // Detailed Modal Info
+                    endTime: formatDateTime(endTimeRaw),
+                    uuid: uniqueID, // d:UniqueID
+                    assetTag: getProp(entry, "AssetTag"),
+                    deploymentType: getProp(entry, "DeploymentType"),
+                    taskSequence: getProp(entry, "TaskSequenceName"),
+                    stepName: getProp(entry, "StepName"),
+                    totalSteps: totalSteps,
+                    currentStep: step,
+                    errors: getProp(entry, "Errors"),
+                    warnings: getProp(entry, "Warnings"),
+                    errorCode: getProp(entry, "ErrorCode"),
+                });
+            }
+            
+            return devices.sort((a, b) => {
+                if (a.status === 'In Progress' && b.status !== 'In Progress') return -1;
+                if (a.status !== 'In Progress' && b.status === 'In Progress') return 1;
+                if (a.status === 'Pending' && b.status !== 'Pending') return -1;
+                if (a.status !== 'Pending' && b.status === 'Pending') return 1;
+                return a.hostname.localeCompare(b.hostname); // Then sort by name
+            });
+        }
+
+
+        // --- Data Fetching ---
+        async function checkServiceStatus() {
+            try {
+                const response = await fetch(`${STATUS_URL}?_=${Date.now()}`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                if (serviceStatus !== 'online') {
+                    console.log("MDT Service is Online.");
+                    serviceStatus = 'online';
+                    mdtStatusLight.className = "h-2 w-2 bg-green-500 rounded-full mr-3";
+                    mdtStatusText.className = "text-sm text-green-500 font-medium";
+                    mdtStatusText.textContent = "Online";
+                }
+                lastSuccessfulCheck = Date.now();
+                if (offlineTimer) {
+                    clearTimeout(offlineTimer);
+                    offlineTimer = null;
+                }
+
+            } catch (error) {
+                console.warn(`MDT Status check failed: ${error.message}`);
+                
+                if (serviceStatus === 'online') {
+                    serviceStatus = 'checking';
+                    mdtStatusLight.className = "h-2 w-2 bg-yellow-500 rounded-full mr-3 animate-pulse";
+                    mdtStatusText.className = "text-sm text-yellow-500 font-medium";
+                    mdtStatusText.textContent = "Checking...";
+                }
+
+                if (serviceStatus === 'checking' && !offlineTimer) {
+                    offlineTimer = setTimeout(() => {
+                        if (Date.now() - lastSuccessfulCheck >= OFFLINE_TIMEOUT) {
+                            console.error("MDT Service is Offline.");
+                            serviceStatus = 'offline';
+                            mdtStatusLight.className = "h-2 w-2 bg-red-500 rounded-full mr-3";
+                            mdtStatusText.className = "text-sm text-red-500 font-medium";
+                            mdtStatusText.textContent = "Offline";
+                        }
+                        offlineTimer = null;
+                    }, OFFLINE_TIMEOUT - (Date.now() - lastSuccessfulCheck));
+                }
+            }
+        }
+        
+        async function fetchData() {
+            try {
+                const response = await fetch(`${DATA_URL}?_=${Date.now()}`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status} - Check IIS Proxy Setup`);
+                }
+                const xmlText = await response.text();
+                allDevices = parseMdtXml(xmlText);
+                renderDashboard();
+                
+                if(serviceStatus !== 'online') {
+                    checkServiceStatus();
+                }
+                
+            } catch (error) {
+                console.error("Error fetching live data.", error);
+                allDevices = [];
+                renderDashboard();
+                messageBox.innerHTML = `<i class="fas fa-exclamation-triangle text-yellow-400 text-4xl mb-4"></i><p class="text-lg">Could not connect to live MDT data.</p><p class="text-sm text-gray-500">${error.message}</p>`;
+                messageBox.classList.remove('hidden');
+            }
+        }
+
+        // --- Page Navigation ---
+        function navigateTo(page) {
+            currentPage = page;
+            navLinks.forEach(link => {
+                if (link.dataset.page === page) {
+                    link.classList.add('active');
+                } else {
+                    link.classList.remove('active');
+                }
+            });
+
+            if (page === 'dashboard') {
+                pageTitle.textContent = 'Device Deployment Dashboard';
+                pageSubtitle.textContent = 'Monitor and manage MDT/WDS deployments in real-time';
+                filterStatus.value = 'all';
+                filterStatus.style.display = 'block';
+            } else if (page === 'archived') {
+                pageTitle.textContent = 'Archived Devices';
+                pageSubtitle.textContent = 'View previously completed or failed deployments';
+                filterStatus.value = 'all'; // Default to all
+                filterStatus.style.display = 'block';
+            }
+            renderDashboard();
+        }
+
+        // --- Archive Functions ---
+        function saveArchivedDevices() {
+            localStorage.setItem('archivedMDTDevices', JSON.stringify(Array.from(archivedDevices)));
+        }
+
+        window.archiveDevice = function(event, deviceId) {
+            event.stopPropagation(); // Prevent card click
+            archivedDevices.add(deviceId);
+            saveArchivedDevices();
+            renderDashboard();
+        }
+
+        window.unarchiveDevice = function(event, deviceId) {
+            event.stopPropagation();
+            archivedDevices.delete(deviceId);
+            saveArchivedDevices();
+            renderDashboard();
+        }
+
+        // --- Modal Functions ---
+        function openDeviceModal(deviceId) {
+            const device = allDevices.find(d => d.id === deviceId);
+            if (!device) return;
+
+            modalHostname.textContent = device.hostname;
+            
+            // Calculate elapsed time for modal
+            let elapsedTime = 'N/A';
+            if (device.startTimeRaw) {
+                elapsedTime = formatDuration(device.startTimeRaw, device.status === 'In Progress' ? null : device.endTimeRaw);
+            }
+            
+            // Build modal content
+            let modalHtml = `
+                <h4 class="text-lg font-semibold text-white mb-4">Deployment Status</h4>
+                <div class="grid grid-cols-2 gap-x-6 gap-y-3 mb-6 bg-gray-800/50 p-4 rounded-lg">
+                    ${renderDetailRow('Status', `<span class="font-semibold text-${getStatusInfo(device.status).color}">${device.status}</span>`)}
+                    ${renderDetailRow('Task Sequence', device.taskSequence)}
+                    ${renderDetailRow('Current Step', `${device.stepName} (${device.currentStep} of ${device.totalSteps})`)}
+                    ${renderDetailRow('Progress', `${device.progress}%`)}
+                    ${renderDetailRow('Elapsed Time', elapsedTime)}
+                </div>
+            `;
+            
+            if(device.status === 'Failed') {
+                modalHtml += `
+                    <h4 class="text-lg font-semibold text-red-400 mb-4">Error Details</h4>
+                    <div class="grid grid-cols-2 gap-x-6 gap-y-3 mb-6 bg-red-900/20 p-4 rounded-lg">
+                        ${renderDetailRow('Error Code', device.errorCode)}
+                        ${renderDetailRow('Errors', device.errors)}
+                        ${renderDetailRow('Warnings', device.warnings)}
+                        ${renderDetailRow('Failed Step', device.stepName)}
+                    </div>
+                `;
+            }
+
+            modalHtml += `
+                <h4 class="text-lg font-semibold text-white mb-4">Device Identifiers</h4>
+                <div class="grid grid-cols-2 gap-x-6 gap-y-3 mb-6 bg-gray-800/50 p-4 rounded-lg">
+                    ${renderDetailRow('UUID', device.uuid)}
+                    ${renderDetailRow('MAC Address', device.macAddress)}
+                    ${renderDetailRow('IP Address', device.ipAddress)}
+                </div>
+                
+                <h4 class="text-lg font-semibold text-white mb-4">Deployment Info</h4>
+                <div class="grid grid-cols-2 gap-x-6 gap-y-3 bg-gray-800/50 p-4 rounded-lg">
+                    ${renderDetailRow('Start Time', device.startTime)}
+                    ${renderDetailRow('End Time', device.endTime)}
+                </div>
+            `;
+            
+            modalBody.innerHTML = modalHtml;
+
+            // Show modal with animation
+            deviceModal.classList.remove('hidden');
+            setTimeout(() => {
+                deviceModal.classList.remove('opacity-0');
+                deviceModal.querySelector('.modal-content').classList.remove('opacity-0', '-translate-y-4');
+            }, 10);
+        }
+        
+        function renderDetailRow(label, value) {
+            return `
+                <div class="flex flex-col">
+                    <span class="text-xs text-gray-400 uppercase font-semibold">${label}</span>
+                    <span class="text-gray-100 font-mono break-words">${formatValue(value)}</span>
+                </div>
+            `;
+        }
+
+        function closeDeviceModal() {
+            deviceModal.classList.add('opacity-0');
+            deviceModal.querySelector('.modal-content').classList.add('opacity-0', '-translate-y-4');
+            setTimeout(() => {
+                deviceModal.classList.add('hidden');
+            }, 250);
+        }
+
+        // --- Mobile Sidebar Toggle ---
+        function toggleSidebar() {
+            sidebar.classList.toggle('open');
+        }
+        sidebarOpenBtn.addEventListener('click', toggleSidebar);
+        sidebarCloseBtn.addEventListener('click', toggleSidebar);
+
+        // --- Event Listeners ---
+        searchBox.addEventListener('input', () => renderDashboard());
+        filterStatus.addEventListener('change', D => renderDashboard());
+        document.getElementById('navigation-links').addEventListener('click', (e) => {
+            e.preventDefault();
+            const link = e.target.closest('.nav-link');
+            if (link && link.dataset.page) {
+                navigateTo(link.dataset.page);
+                if (sidebar.classList.contains('open')) {
+                    toggleSidebar();
+                }
+            }
+        });
+
+        // --- Initial Load ---
+        document.addEventListener('DOMContentLoaded', () => {
+            messageBox.classList.remove('hidden');
+            navigateTo('dashboard'); // Start on the dashboard
+            checkServiceStatus(); // Initial status check
+            fetchData(); // Initial data fetch
+            
+            // Set up refresh intervals
+            setInterval(fetchData, REFRESH_INTERVAL);
+            setInterval(checkServiceStatus, REFRESH_INTERVAL * 2);
+
+            // Set up timer to update elapsed time on 'In Progress' cards
+            if (elapsedTimerInterval) clearInterval(elapsedTimerInterval);
+            elapsedTimerInterval = setInterval(updateElapsedTimes, 1000); // Update every second
+        });
+    </script>
+</body>
+</html>
